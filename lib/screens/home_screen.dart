@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/scan_provider.dart';
 import '../models/quiz_result.dart';
 import '../utils/app_icons.dart';
+import 'camera_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -139,7 +140,14 @@ class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMi
                     label: 'Scan Quiz',
                     subtitle: 'Camera',
                     color: Theme.of(context).colorScheme.primary,
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CameraScreen(),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),

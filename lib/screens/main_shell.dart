@@ -3,6 +3,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'home_screen.dart';
 import 'answer_keys_screen.dart';
 import 'settings_screen.dart';
+import 'camera_screen.dart';
 import '../utils/app_icons.dart';
 
 class MainShell extends StatefulWidget {
@@ -171,6 +172,12 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
                     subtitle: const Text('Take a photo of the completed answer sheet'),
                     onTap: () {
                       Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CameraScreen(),
+                        ),
+                      );
                     },
                   ),
                   const SizedBox(height: 8),

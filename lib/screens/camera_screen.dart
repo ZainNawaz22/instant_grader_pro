@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -12,6 +13,7 @@ class _CameraScreenState extends State<CameraScreen> {
   CameraController? _cameraController;
   bool _isInitialized = false;
   String? _errorMessage;
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -59,18 +61,52 @@ class _CameraScreenState extends State<CameraScreen> {
       return;
     }
 
+    if (_isProcessing) {
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+    });
+
     try {
       final XFile image = await _cameraController!.takePicture();
+      
+      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      
+      final InputImage inputImage = InputImage.fromFilePath(image.path);
+      
+      final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
+      
+      print('=== Recognized Text ===');
+      for (TextBlock block in recognizedText.blocks) {
+        print('\nBlock text: ${block.text}');
+        print('Block bounding box: ${block.boundingBox}');
+        
+        for (TextLine line in block.lines) {
+          print('  Line text: ${line.text}');
+          print('  Line bounding box: ${line.boundingBox}');
+        }
+      }
+      print('=== End of Recognized Text ===');
+      
+      await textRecognizer.close();
+      
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Image captured: ${image.path}')),
-        );
+        Navigator.pop(context);
       }
     } catch (e) {
+      print('Error during text recognition: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error capturing image: $e')),
+          SnackBar(content: Text('Error processing image: $e')),
         );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
       }
     }
   }
@@ -83,11 +119,13 @@ class _CameraScreenState extends State<CameraScreen> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: _buildBody(),
-      floatingActionButton: _isInitialized
+      floatingActionButton: _isInitialized && !_isProcessing
           ? FloatingActionButton(
               onPressed: _captureImage,
               tooltip: 'Capture Image',
-              child: const Icon(Icons.camera_alt),
+              child: _isProcessing
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Icon(Icons.camera_alt),
             )
           : null,
     );
@@ -115,9 +153,21 @@ class _CameraScreenState extends State<CameraScreen> {
       );
     }
 
-    if (!_isInitialized) {
-      return const Center(
-        child: CircularProgressIndicator(),
+    if (!_isInitialized || _isProcessing) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(),
+            if (_isProcessing) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Processing image...',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ],
+          ],
+        ),
       );
     }
 
