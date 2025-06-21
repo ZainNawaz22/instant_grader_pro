@@ -2,6 +2,7 @@ import 'dart:io' as io;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:instant_grader_pro/omr_engine/detectors/darkness_detector.dart';
 import 'package:image/image.dart' as img;
 import 'package:instant_grader_pro/omr_engine/core/grid_detector.dart';
 import 'package:instant_grader_pro/omr_engine/core/pre_processing.dart';
@@ -30,28 +31,60 @@ class OmrProcessor {
 
     // --- OMR Pipeline (Simplified for now to avoid OpenCV issues) ---
 
-    // For now, we'll create a simple mock result to test the UI integration
-    // TODO: Implement full CV pipeline once OpenCV API is clarified
-    
+    // Basic OMR detection based on darkness analysis
+    // ------------------------------------------------
+    // This is a VERY simplified implementation which assumes the
+    // answer bubbles are laid out in a 5x4 uniform grid that spans the
+    // entire image.  Each grid cell is analysed individually and a
+    // darkness score is computed.  If the score is above a threshold
+    // we treat the bubble as filled.
+
+    const int rows = 5;
+    const int cols = 4;
+    const double fillThreshold = 0.50; // tune as required
+
     final results = <OmrResult>[];
-    
-    // Mock some results for testing
-    for (int row = 0; row < 5; row++) {
-      for (int col = 0; col < 4; col++) {
-        // Simulate some random marking detection
-        final bool isMarked = (row + col) % 3 == 0; // Mock logic
-        final double confidence = isMarked ? 0.85 : 0.15;
-        
-        results.add(OmrResult(
-          rowIndex: row,
-          colIndex: col,
-          isMarked: isMarked,
-          confidence: confidence,
-        ));
+
+    final int cellHeight = (image.height / rows).floor();
+    final int cellWidth = (image.width / cols).floor();
+
+    for (int row = 0; row < rows; row++) {
+      for (int col = 0; col < cols; col++) {
+        final int startX = col * cellWidth;
+        final int startY = row * cellHeight;
+
+        // Ensure we stay within bounds for the last cell due to integer division
+        final int roiWidth = (col == cols - 1)
+            ? image.width - startX
+            : cellWidth;
+        final int roiHeight = (row == rows - 1)
+            ? image.height - startY
+            : cellHeight;
+
+        final img.Image roi = img.copyCrop(
+          image,
+          x: startX,
+          y: startY,
+          width: roiWidth,
+          height: roiHeight,
+        );
+
+        final double score = DarknessDetector.getScore(roi);
+        final bool isMarked = score >= fillThreshold;
+
+        results.add(
+          OmrResult(
+            rowIndex: row,
+            colIndex: col,
+            isMarked: isMarked,
+            confidence: score,
+          ),
+        );
       }
     }
 
-    debugPrint("OMR processing complete for $imagePath. Found ${results.where((r) => r.isMarked).length} marked bubbles.");
+    debugPrint(
+        "OMR processing complete for $imagePath. Found ${results.where((r) => r.isMarked).length} marked bubbles.");
     return results;
   }
 }
