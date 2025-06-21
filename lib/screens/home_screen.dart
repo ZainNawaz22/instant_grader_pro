@@ -5,6 +5,7 @@ import '../providers/scan_provider.dart';
 import '../models/quiz_result.dart';
 import '../utils/app_icons.dart';
 import 'camera_screen.dart';
+import 'answer_keys_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -158,7 +159,14 @@ class _HomeScreenState extends State<HomeScreen> with AutomaticKeepAliveClientMi
                     label: 'Answer Key',
                     subtitle: 'Create',
                     color: Theme.of(context).colorScheme.secondary,
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AnswerKeysScreen(),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
