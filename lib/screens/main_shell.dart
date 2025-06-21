@@ -3,6 +3,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'home_screen.dart';
 import 'answer_keys_screen.dart';
 import 'settings_screen.dart';
+import '../utils/app_icons.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -11,47 +12,191 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
   int _selectedIndex = 0;
+  late PageController _pageController;
+  late AnimationController _fabAnimationController;
 
-  static const List<Widget> _screens = <Widget>[
+  final List<Widget> _screens = const [
     HomeScreen(),
     AnswerKeysScreen(),
     SettingsScreen(),
   ];
 
-  void _onItemTapped(int index) {
+  final List<NavigationDestination> _destinations = const [
+    NavigationDestination(
+      icon: Icon(LucideIcons.house),
+      selectedIcon: Icon(LucideIcons.house),
+      label: 'Home',
+    ),
+    NavigationDestination(
+      icon: Icon(LucideIcons.key),
+      selectedIcon: Icon(LucideIcons.key),
+      label: 'Answer Keys',
+    ),
+    NavigationDestination(
+      icon: Icon(LucideIcons.settings),
+      selectedIcon: Icon(LucideIcons.settings),
+      label: 'Settings',
+    ),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+    _fabAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _fabAnimationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _fabAnimationController.dispose();
+    super.dispose();
+  }
+
+  void _onDestinationSelected(int index) {
+    if (index == _selectedIndex) return;
+    
     setState(() {
       _selectedIndex = index;
     });
+    
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.house),
-            label: 'Home',
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        children: _screens,
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 16,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: _onDestinationSelected,
+          destinations: _destinations,
+          height: 72,
+          animationDuration: const Duration(milliseconds: 300),
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        ),
+      ),
+      floatingActionButton: _selectedIndex == 0
+          ? ScaleTransition(
+              scale: _fabAnimationController,
+              child: FloatingActionButton.extended(
+                onPressed: () {
+                  _showScanDialog(context);
+                },
+                icon: const Icon(LucideIcons.camera),
+                label: const Text('Scan'),
+                elevation: 4,
+              ),
+            )
+          : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  void _showScanDialog(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.4,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(24),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.key),
-            label: 'Answer Keys',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(LucideIcons.settings),
-            label: 'Settings',
-          ),
-        ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: Theme.of(context).colorScheme.primary,
-        unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant,
-        onTap: _onItemTapped,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        elevation: 8,
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Scan Options',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 24),
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        LucideIcons.camera,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                    title: const Text('Scan Answer Sheet'),
+                    subtitle: const Text('Take a photo of the completed answer sheet'),
+                    onTap: () {
+                      Navigator.pop(context);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.secondaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        LucideIcons.folder,
+                        color: Theme.of(context).colorScheme.onSecondaryContainer,
+                      ),
+                    ),
+                    title: const Text('Import from Gallery'),
+                    subtitle: const Text('Select an image from your device'),
+                    onTap: () {
+                      Navigator.pop(context);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
