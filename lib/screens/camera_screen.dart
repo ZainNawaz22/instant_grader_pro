@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:instant_grader_pro/omr_engine/models/omr_result.dart';
+import 'package:instant_grader_pro/omr_engine/omr_processor.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -56,56 +57,6 @@ class _CameraScreenState extends State<CameraScreen> {
     super.dispose();
   }
 
-  Map<String, String> _extractStudentInfo(String text) {
-    final Map<String, String> studentInfo = {};
-    
-    final lines = text.split('\n').map((line) => line.trim()).where((line) => line.isNotEmpty).toList();
-    
-    final namePatterns = [
-      RegExp(r'(?:student\s*)?name\s*[:=]\s*(.+)', caseSensitive: false),
-      RegExp(r'name\s*[:=]\s*(.+)', caseSensitive: false),
-      RegExp(r'student\s*[:=]\s*(.+)', caseSensitive: false),
-    ];
-    
-    final idPatterns = [
-      RegExp(r'(?:student\s*)?(?:id|roll\s*no\.?|roll\s*number|reg\s*no\.?|registration\s*no\.?)\s*[:=]\s*([A-Za-z0-9\-\/]+)', caseSensitive: false),
-      RegExp(r'(?:id|roll|reg)\s*[:=]\s*([A-Za-z0-9\-\/]+)', caseSensitive: false),
-      RegExp(r'(\d{2,}[A-Za-z0-9\-\/]*)', caseSensitive: false),
-    ];
-    
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      
-      for (final pattern in namePatterns) {
-        final match = pattern.firstMatch(line);
-        if (match != null && studentInfo['name'] == null) {
-          final name = match.group(1)?.trim();
-          if (name != null && name.length > 2 && !RegExp(r'^\d+$').hasMatch(name)) {
-            studentInfo['name'] = name;
-            break;
-          }
-        }
-      }
-      
-      for (final pattern in idPatterns) {
-        final match = pattern.firstMatch(line);
-        if (match != null && studentInfo['id'] == null) {
-          final id = match.group(1)?.trim();
-          if (id != null && id.length >= 2) {
-            studentInfo['id'] = id;
-            break;
-          }
-        }
-      }
-      
-      if (studentInfo['name'] != null && studentInfo['id'] != null) {
-        break;
-      }
-    }
-    
-    return studentInfo;
-  }
-
   Future<void> _captureImage() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
@@ -122,29 +73,20 @@ class _CameraScreenState extends State<CameraScreen> {
     try {
       final XFile image = await _cameraController!.takePicture();
       
-      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
-      
-      final InputImage inputImage = InputImage.fromFilePath(image.path);
-      
-      final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
-      
-      String fullText = '';
-      for (TextBlock block in recognizedText.blocks) {
-        fullText += block.text + '\n';
-      }
-      
-      final studentInfo = _extractStudentInfo(fullText);
-      
-      await textRecognizer.close();
-      
+      // Call the OMR engine to process the image
+      final List<OmrResult> omrResults = await OmrProcessor.processImage(image.path);
+
       if (mounted) {
-        _showStudentInfoDialog(studentInfo);
+        // For now, just print results and show a simple dialog.
+        // In a full implementation, you would pass these results to the next screen.
+        debugPrint('OMR Results: ${omrResults.toString()}');
+        _showOmrResultDialog(omrResults.length);
       }
     } catch (e) {
-      print('Error during text recognition: $e');
+      debugPrint('Error during OMR processing: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error processing image: $e')),
+          SnackBar(content: Text('Error processing sheet: $e')),
         );
       }
     } finally {
@@ -156,107 +98,26 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  void _showStudentInfoDialog(Map<String, String> studentInfo) {
+  void _showOmrResultDialog(int markCount) {
     showDialog(
       context: context,
-      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: Row(
+        title: const Row(
           children: [
-            Icon(
-              Icons.person,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            const SizedBox(width: 8),
-            const Text('Student Information'),
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Processing Complete'),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (studentInfo['name'] != null) ...[
-              _buildInfoRow('Name', studentInfo['name']!),
-              const SizedBox(height: 12),
-            ],
-            if (studentInfo['id'] != null) ...[
-              _buildInfoRow('ID/Roll No.', studentInfo['id']!),
-              const SizedBox(height: 12),
-            ],
-            if (studentInfo.isEmpty) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.errorContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: Theme.of(context).colorScheme.onErrorContainer,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'No student information found.\nPlease ensure the name/ID is clearly visible.',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onErrorContainer,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
+        content: Text('$markCount marks were detected on the sheet.'),
         actions: [
-          TextButton(
+          FilledButton(
             onPressed: () {
               Navigator.pop(context);
+              // Potentially pop again to go back to the previous screen with results
+              // Navigator.pop(context, ...);
             },
-            child: const Text('Retry'),
-          ),
-          if (studentInfo.isNotEmpty) ...[
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.pop(context, studentInfo);
-              },
-              child: const Text('Confirm'),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$label:',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
+            child: const Text('OK'),
           ),
         ],
       ),
@@ -267,7 +128,7 @@ class _CameraScreenState extends State<CameraScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scan Student Info'),
+        title: const Text('Scan Answer Sheet'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: _buildBody(),
@@ -324,7 +185,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   const CircularProgressIndicator(color: Colors.white),
                   const SizedBox(height: 16),
                   Text(
-                    'Extracting student information...',
+                    'Processing answer sheet...',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.white,
                     ),
@@ -344,7 +205,7 @@ class _CameraScreenState extends State<CameraScreen> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Text(
-              'Position the answer sheet so the student name/ID section is clearly visible',
+              'Position the entire answer sheet inside the frame and hold steady',
               style: TextStyle(color: Colors.white),
               textAlign: TextAlign.center,
             ),
