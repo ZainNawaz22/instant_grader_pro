@@ -152,7 +152,7 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Scan Options',
+                    'Scan Student Information',
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 24),
@@ -168,8 +168,8 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
                         color: Theme.of(context).colorScheme.onPrimaryContainer,
                       ),
                     ),
-                    title: const Text('Scan Answer Sheet'),
-                    subtitle: const Text('Take a photo of the completed answer sheet'),
+                    title: const Text('Scan Name & ID'),
+                    subtitle: const Text('Extract student name and roll number from answer sheet'),
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(
@@ -177,7 +177,11 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
                         MaterialPageRoute(
                           builder: (context) => const CameraScreen(),
                         ),
-                      );
+                      ).then((result) {
+                        if (result != null && result is Map<String, String>) {
+                          _showExtractedInfo(context, result);
+                        }
+                      });
                     },
                   ),
                   const SizedBox(height: 8),
@@ -204,6 +208,175 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showExtractedInfo(BuildContext context, Map<String, String> info) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.5,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(24),
+          ),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle,
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 28,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Student Information Extracted',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  if (info['name'] != null)
+                    _buildExtractedInfoCard(
+                      context,
+                      icon: Icons.person,
+                      label: 'Student Name',
+                      value: info['name']!,
+                    ),
+                  if (info['name'] != null) const SizedBox(height: 12),
+                  if (info['id'] != null)
+                    _buildExtractedInfoCard(
+                      context,
+                      icon: Icons.badge,
+                      label: 'ID/Roll Number',
+                      value: info['id']!,
+                    ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _showScanDialog(context);
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Scan Again'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Student: ${info['name'] ?? info['id'] ?? 'Unknown'}'),
+                                action: SnackBarAction(
+                                  label: 'View',
+                                  onPressed: () {},
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.save),
+                          label: const Text('Use Info'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExtractedInfoCard(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              icon,
+              color: Theme.of(context).colorScheme.primary,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Copied to clipboard'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+            icon: const Icon(Icons.copy, size: 20),
+            tooltip: 'Copy',
+          ),
+        ],
       ),
     );
   }
