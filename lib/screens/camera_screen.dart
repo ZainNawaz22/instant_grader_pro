@@ -55,10 +55,19 @@ class _CameraScreenState extends State<CameraScreen> {
 
       _cameraController = CameraController(
         cameras.first,
-        ResolutionPreset.high,
+        ResolutionPreset.max, // highest available resolution for better OCR/OMR
+        enableAudio: false,
       );
 
       await _cameraController!.initialize();
+
+      // Enable continuous auto-focus during preview for sharper frames
+      try {
+        await _cameraController!.setFocusMode(FocusMode.auto);
+      } catch (_) {
+        // Older versions of the camera plugin may not support focus mode APIs
+        debugPrint('FocusMode.auto not supported on this device/plugin version');
+      }
 
       if (mounted) {
         setState(() {
@@ -158,7 +167,19 @@ class _CameraScreenState extends State<CameraScreen> {
     });
 
     try {
+      // Lock focus to avoid lens movement while capturing the still image
+      try {
+        await _cameraController!.setFocusMode(FocusMode.locked);
+      } catch (_) {
+        debugPrint('FocusMode.locked not supported, proceeding without focus lock');
+      }
+
       final XFile image = await _cameraController!.takePicture();
+
+      // Restore continuous focus for the preview after capture
+      try {
+        await _cameraController!.setFocusMode(FocusMode.auto);
+      } catch (_) {}
       
       // First extract student info, then process OMR
       await _extractStudentInfo(image.path);

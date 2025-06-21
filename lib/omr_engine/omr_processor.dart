@@ -29,6 +29,24 @@ class OmrProcessor {
       throw Exception("Could not decode image from path: $imagePath");
     }
 
+    // Downscale very large images to reduce RAM and processing time while retaining detail
+    const int maxDim = 1600; // pixels
+    if (image.width > maxDim || image.height > maxDim) {
+      final int newWidth;
+      final int newHeight;
+      if (image.width >= image.height) {
+        newWidth = maxDim;
+        newHeight = (image.height * maxDim / image.width).round();
+      } else {
+        newHeight = maxDim;
+        newWidth = (image.width * maxDim / image.height).round();
+      }
+      debugPrint('Resizing image from ${image.width}x${image.height} '
+          'to ${newWidth}x${newHeight} for processing');
+      final img.Image resized = img.copyResize(image, width: newWidth, height: newHeight);
+      image = resized;
+    }
+
     // --- OMR Pipeline (Simplified for now to avoid OpenCV issues) ---
 
     // Basic OMR detection based on darkness analysis
