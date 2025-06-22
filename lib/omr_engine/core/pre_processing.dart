@@ -1,6 +1,5 @@
 import 'package:image/image.dart' as img;
 import 'package:opencv_dart/opencv_dart.dart' as cv;
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 class PreProcessing {
