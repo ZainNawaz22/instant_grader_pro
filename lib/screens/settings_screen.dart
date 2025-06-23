@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
-import 'package:provider/provider.dart';
-import '../providers/scan_provider.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -471,7 +469,6 @@ class _SettingsScreenState extends State<SettingsScreen> with AutomaticKeepAlive
           FilledButton(
             onPressed: () {
               Navigator.pop(context);
-              context.read<ScanProvider>().clearAllData();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('All data has been cleared'),

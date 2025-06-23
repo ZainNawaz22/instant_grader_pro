@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:instant_grader_pro/models/answer_key.dart';
-import 'package:instant_grader_pro/omr_engine/models/omr_result.dart';
-import 'package:instant_grader_pro/omr_engine/omr_processor.dart';
-import 'package:instant_grader_pro/services/grading_service.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image/image.dart' as img;
+import '../utils/image_processing/corner_detector.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -19,28 +16,10 @@ class _CameraScreenState extends State<CameraScreen> {
   String? _errorMessage;
   bool _isProcessing = false;
   
-  final GradingService _gradingService = GradingService();
-  AnswerKey? _selectedAnswerKey;
-  
   @override
   void initState() {
     super.initState();
     _initializeCamera();
-    _initializeGrading();
-  }
-  
-  Future<void> _initializeGrading() async {
-    await _gradingService.init();
-    
-    // Check if there are any answer keys available
-    final answerKeys = _gradingService.getAllAnswerKeys();
-    if (answerKeys.isEmpty && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No answer keys found. Please create one first.'),
-        ),
-      );
-    }
   }
 
   Future<void> _initializeCamera() async {
@@ -87,70 +66,134 @@ class _CameraScreenState extends State<CameraScreen> {
     super.dispose();
   }
   
-  Future<void> _extractStudentInfo(String imagePath) async {
+  Future<void> _processImage(String imagePath) async {
     try {
-      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
-      final InputImage inputImage = InputImage.fromFilePath(imagePath);
-      final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
-      
-      String fullText = '';
-      for (TextBlock block in recognizedText.blocks) {
-        fullText += block.text + '\n';
+      final imageBytes = await XFile(imagePath).readAsBytes();
+      final image = img.decodeImage(imageBytes);
+
+      if (image == null) {
+        throw Exception("Could not decode image");
       }
-      
-      await textRecognizer.close();
-      
-      // Extract roll number
-      final rollNumberPattern = RegExp(r'(?:roll\s*no\.?|roll\s*number|id)\s*[:=]\s*([A-Za-z0-9\-\/]+)', caseSensitive: false);
-      final rollMatch = rollNumberPattern.firstMatch(fullText);
-      final rollNumber = rollMatch?.group(1)?.trim() ?? 'Unknown';
-      
-      // Extract name (optional)
-      final namePattern = RegExp(r'(?:student\s*)?name\s*[:=]\s*(.+)', caseSensitive: false);
-      final nameMatch = namePattern.firstMatch(fullText);
-      final studentName = nameMatch?.group(1)?.trim();
+
+      // Process the image for corner detection
+      final result = await CornerDetector.detectCorners(image);
+
+      debugPrint("Corner detection result: ${result.message}");
       
       if (mounted) {
-        _processAnswerSheet(imagePath, rollNumber, studentName);
+        if (result.cornersDetected) {
+          _showCornerDetectionSuccess(result);
+        } else {
+          _showCornerDetectionFailure(result);
+        }
       }
     } catch (e) {
-      debugPrint('Error extracting student info: $e');
+      debugPrint('Error processing image: $e');
       if (mounted) {
-        _processAnswerSheet(imagePath, 'Unknown', null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error processing image: $e')),
+        );
       }
     }
   }
-  
-  Future<void> _processAnswerSheet(String imagePath, String rollNumber, String? studentName) async {
-    try {
-      // Process the answer sheet
-      final List<OmrResult> omrResults = await OmrProcessor.processImage(imagePath);
-      
-      if (_selectedAnswerKey != null) {
-        // Grade the student
-        final result = await _gradingService.gradeStudent(
-          rollNumber: rollNumber,
-          studentName: studentName,
-          answerKeyId: _selectedAnswerKey!.id,
-          omrResults: omrResults,
-        );
-        
-        if (mounted) {
-          _showGradingResultDialog(result, _selectedAnswerKey!);
-        }
-      } else {
-        if (mounted) {
-          _showOmrResultDialog(omrResults.where((r) => r.isMarked).length);
-        }
-      }
-    } catch (e) {
-      debugPrint('Error processing answer sheet: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error processing sheet: $e')),
-        );
-      }
-    }
+
+  void _showCornerDetectionSuccess(CornerDetectionResult result) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.check_circle,
+              color: Colors.green,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            const Text('Corners Detected!'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(result.message),
+            if (result.corners != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Found ${result.corners!.length} corners:',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ...result.corners!.asMap().entries.map((entry) => 
+                Text('Corner ${entry.key + 1}: (${entry.value.x}, ${entry.value.y})')
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('SCAN ANOTHER'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context); // Go back to home
+            },
+            child: const Text('DONE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCornerDetectionFailure(CornerDetectionResult result) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              Icons.warning,
+              color: Colors.orange,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            const Text('No Corners Detected'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(result.message),
+            const SizedBox(height: 16),
+            const Text(
+              'Tips for better detection:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text('• Ensure good lighting'),
+            const Text('• Hold the camera steady'),
+            const Text('• Make sure the document fills the frame'),
+            const Text('• Avoid shadows and reflections'),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('TRY AGAIN'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context); // Go back to home
+            },
+            child: const Text('CANCEL'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _captureImage() async {
@@ -181,8 +224,7 @@ class _CameraScreenState extends State<CameraScreen> {
         await _cameraController!.setFocusMode(FocusMode.auto);
       } catch (_) {}
       
-      // First extract student info, then process OMR
-      await _extractStudentInfo(image.path);
+      await _processImage(image.path);
       
     } catch (e) {
       debugPrint('Error during image capture: $e');
@@ -199,142 +241,13 @@ class _CameraScreenState extends State<CameraScreen> {
       }
     }
   }
-  
-  void _showGradingResultDialog(result, AnswerKey answerKey) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(
-              Icons.assignment_turned_in,
-              color: result.percentage >= 50 ? Colors.green : Colors.red,
-            ),
-            const SizedBox(width: 8),
-            const Text('Grading Complete'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Test: ${answerKey.testName}', style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Text('Roll Number: ${result.rollNumber}'),
-              if (result.studentName != null) Text('Name: ${result.studentName}'),
-              const Divider(),
-              Text('Score: ${result.score.toStringAsFixed(1)} / ${result.maxScore.toStringAsFixed(1)}'),
-              Text('Percentage: ${result.percentage.toStringAsFixed(1)}%'),
-              Text('Grade: ${result.grade}', style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: result.percentage >= 50 ? Colors.green : Colors.red,
-              )),
-              const SizedBox(height: 8),
-              Text('Correct Answers: ${result.totalCorrect}'),
-              Text('Incorrect Answers: ${result.totalIncorrect}'),
-              Text('Unanswered: ${result.totalUnanswered}'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text('NEW SCAN'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context); // Go back to home
-            },
-            child: const Text('DONE'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showOmrResultDialog(int markCount) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green),
-            SizedBox(width: 8),
-            Text('Processing Complete'),
-          ],
-        ),
-        content: Text('$markCount marks were detected on the sheet.'),
-        actions: [
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Potentially pop again to go back to the previous screen with results
-              // Navigator.pop(context, ...);
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  void _showAnswerKeySelector() {
-    final answerKeys = _gradingService.getAllAnswerKeys();
-    
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Select Answer Key',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            if (answerKeys.isEmpty)
-              const Text('No answer keys available. Please create one first.')
-            else
-              ...answerKeys.map((key) => ListTile(
-                title: Text(key.testName),
-                subtitle: Text('${key.totalQuestions} questions • ${key.subject ?? "No subject"}'),
-                trailing: _selectedAnswerKey?.id == key.id
-                    ? const Icon(Icons.check, color: Colors.green)
-                    : null,
-                onTap: () {
-                  setState(() {
-                    _selectedAnswerKey = key;
-                  });
-                  Navigator.pop(context);
-                },
-              )),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scan Answer Sheet'),
+        title: const Text('Scan Document'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.key),
-            onPressed: _showAnswerKeySelector,
-            tooltip: 'Select Answer Key',
-          ),
-        ],
       ),
       body: _buildBody(),
       floatingActionButton: _isInitialized && !_isProcessing
@@ -390,7 +303,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   const CircularProgressIndicator(color: Colors.white),
                   const SizedBox(height: 16),
                   Text(
-                    'Processing answer sheet...',
+                    'Processing image...',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.white,
                     ),
@@ -409,21 +322,13 @@ class _CameraScreenState extends State<CameraScreen> {
               color: Colors.black54,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Column(
+            child: const Column(
               children: [
-                const Text(
-                  'Position the entire answer sheet inside the frame and hold steady',
+                Text(
+                  'Position the entire document inside the frame and hold steady',
                   style: TextStyle(color: Colors.white),
                   textAlign: TextAlign.center,
                 ),
-                if (_selectedAnswerKey != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Answer Key: ${_selectedAnswerKey!.testName}',
-                    style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
               ],
             ),
           ),
