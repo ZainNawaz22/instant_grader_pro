@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "384928500404",
+    "project_id": "schoolmanagmentsystem-ee3e5",
+    "storage_bucket": "schoolmanagmentsystem-ee3e5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:384928500404:android:77b6cc5c2fc8648c4625e1",
+        "android_client_info": {
+          "package_name": "com.example.instant_grader_pro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0jqFWspsu3YaHwp5qdZtOKCjGK6pDqJU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
